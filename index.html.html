@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>座席表 - ゆずりは訪問診療所</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.7/axios.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Zen+Kaku+Gothic+New:wght@700;900&display=swap');
+:root{--bg:#f5f3ef;--panel:#fff;--border:#e2ddd6;--text:#2c2825;--muted:#9c948a;--header-h:52px;--tab-h:44px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+/* HEADER */
+.header{background:var(--text);color:#fff;height:var(--header-h);padding:0 14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;position:sticky;top:0;z-index:60;box-shadow:0 2px 8px rgba(0,0,0,.25);}
+.header-title{font-family:'Zen Kaku Gothic New',sans-serif;font-weight:900;font-size:14px;letter-spacing:.06em;margin-right:6px;white-space:nowrap;}
+.tb-btn{padding:5px 11px;border:1px solid rgba(255,255,255,.25);border-radius:6px;background:transparent;color:#fff;font-family:'Noto Sans JP',sans-serif;font-size:12px;cursor:pointer;white-space:nowrap;transition:background .15s;}
+.tb-btn:hover{background:rgba(255,255,255,.15);}
+.tb-btn.danger{border-color:#e07060;color:#ffb0a0;}
+.tb-btn.danger:hover{background:rgba(224,112,96,.2);}
+.sep{width:1px;height:26px;background:rgba(255,255,255,.2);margin:0 3px;}
+.mode-toggle{margin-left:auto;display:flex;background:rgba(255,255,255,.1);border-radius:8px;padding:3px;gap:2px;}
+.mode-btn{padding:4px 10px;border:none;border-radius:6px;font-family:'Noto Sans JP',sans-serif;font-size:12px;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;transition:all .2s;}
+.mode-btn.active{background:rgba(255,255,255,.22);color:#fff;font-weight:700;}
+
+/* FLOOR TABS */
+.floor-tabs{display:flex;background:var(--panel);border-bottom:2px solid var(--border);position:sticky;top:var(--header-h);z-index:55;}
+.floor-tab{flex:1;max-width:160px;padding:0 20px;height:var(--tab-h);display:flex;align-items:center;justify-content:center;gap:6px;font-size:14px;font-weight:700;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;color:var(--muted);}
+.floor-tab:hover{color:var(--text);}
+.floor-tab.active{color:var(--text);border-bottom-color:var(--text);}
+.floor-tab .tab-count{font-size:11px;background:var(--border);color:var(--muted);padding:1px 6px;border-radius:10px;}
+.floor-tab.active .tab-count{background:var(--text);color:#fff;}
+
+/* WORKSPACE */
+.workspace{display:flex;height:calc(100vh - var(--header-h) - var(--tab-h));}
+
+/* SIDEBAR */
+.sidebar{width:220px;min-width:220px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;transition:width .25s,min-width .25s,opacity .2s;position:relative;}
+.sidebar.collapsed{width:0;min-width:0;overflow:hidden;opacity:0;border-right:none;}
+.sidebar-toggle{position:fixed;left:220px;top:calc(var(--header-h) + var(--tab-h) + 50%);transform:translateY(-50%);z-index:56;width:16px;height:52px;background:#d0c8be;border:none;border-radius:0 8px 8px 0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:#5a5248;transition:left .25s,background .15s;box-shadow:2px 0 6px rgba(0,0,0,.12);}
+.sidebar-toggle:hover{background:#b8b0a4;color:var(--text);}
+.sidebar.collapsed~* .sidebar-toggle,.sidebar-toggle.collapsed-state{left:0;}
+.sidebar-section{padding:12px 14px;border-bottom:1px solid var(--border);}
+.sidebar-section h3{font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+.add-btn{width:100%;padding:6px;border:1.5px dashed var(--border);border-radius:6px;background:transparent;font-family:'Noto Sans JP',sans-serif;font-size:12px;color:var(--muted);cursor:pointer;transition:all .15s;margin-top:4px;}
+.add-btn:hover{border-color:#7090c0;color:#3060a0;background:#f0f4fa;}
+.staff-item{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:5px;cursor:grab;font-size:12px;transition:background .1s;}
+.staff-item:hover{background:var(--bg);}
+.staff-item.on-floor{opacity:.55;cursor:default;}
+.staff-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.staff-name-txt{font-weight:600;flex:1;}
+.staff-dept-tag{font-size:9px;padding:1px 5px;border-radius:8px;white-space:nowrap;}
+.zone-list-item{display:flex;align-items:center;gap:6px;padding:4px 5px;border-radius:5px;font-size:12px;cursor:pointer;transition:background .1s;}
+.zone-list-item:hover{background:var(--bg);}
+.zone-list-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0;border:1px solid;}
+.zone-edit-btn{font-size:10px;color:var(--muted);padding:1px 4px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;}
+.zone-edit-btn:hover{color:var(--text);}
+.legend-item{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:11px;}
+.legend-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
+
+/* FLOOR CANVAS */
+.floor-wrapper{flex:1;overflow:auto;padding:16px;display:flex;align-items:flex-start;justify-content:center;}
+.floor{position:relative;background:#faf9f7;border:2px solid #b0a898;border-radius:6px;box-shadow:0 4px 24px rgba(0,0,0,.10);flex-shrink:0;overflow:hidden;}
+
+/* ZONE */
+.zone{position:absolute;border:1.5px solid #c8c0b4;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#7a7068;text-align:center;line-height:1.4;user-select:none;background:#f0ece6;}
+.zone.edit-mode{cursor:grab;}
+.zone.edit-mode:hover{box-shadow:0 0 0 2px #7090c0;z-index:10;}
+.zone.dragging{cursor:grabbing;z-index:100;box-shadow:0 6px 20px rgba(0,0,0,.2);opacity:.9;}
+.resize-handle{position:absolute;right:-5px;bottom:-5px;width:10px;height:10px;background:#fff;border:2px solid #7090c0;border-radius:2px;cursor:se-resize;z-index:20;display:none;}
+.zone.edit-mode .resize-handle{display:block;}
+
+/* WALL / DOOR */
+.wall{position:absolute;background:#6a6058;z-index:3;border-radius:3px;}
+.wall.h{height:6px;}
+.wall.v{width:6px;}
+.wall.edit-mode{cursor:grab;}
+.wall.edit-mode:hover{background:#3a4a9a;box-shadow:0 0 0 2px #8898e8;}
+.wall.dragging{background:#2a3a8a;z-index:50;}
+.door{position:absolute;z-index:4;}
+.door.edit-mode{cursor:grab;}
+.door.dragging{z-index:50;}
+
+/* DESK */
+.desk{position:absolute;width:82px;height:62px;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:2px solid;user-select:none;z-index:2;}
+.desk.edit-mode{cursor:grab;}
+.desk.edit-mode:hover{box-shadow:0 4px 14px rgba(0,0,0,.18);z-index:10;}
+.desk.dragging{cursor:grabbing;box-shadow:0 8px 24px rgba(0,0,0,.28);transform:scale(1.05);z-index:100;opacity:.92;}
+.desk-name{font-weight:700;font-size:13px;}
+.desk-dept{font-size:9px;opacity:.75;}
+.floor.drag-over::after{content:'';position:absolute;inset:0;border:3px dashed #7090c0;border-radius:4px;pointer-events:none;opacity:.5;}
+
+/* SHARED BADGE */
+.shared-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:12px;padding:3px 9px;font-size:11px;color:#a0ffa0;}
+.shared-badge.offline{color:#ffaaaa;background:rgba(255,100,100,.1);}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#4caf7d;animation:pulse 2s infinite;}
+.sync-dot.offline{background:#e07060;animation:none;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(44,40,37,.4);z-index:200;display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px);}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--panel);border-radius:14px;padding:22px;width:340px;max-width:95vw;box-shadow:0 24px 64px rgba(0,0,0,.22);animation:mIn .18s ease;max-height:90vh;overflow-y:auto;}
+@keyframes mIn{from{transform:scale(.95);opacity:0;}to{transform:scale(1);opacity:1;}}
+.modal h3{font-family:'Zen Kaku Gothic New',sans-serif;font-size:15px;font-weight:900;margin-bottom:16px;}
+.modal label{display:block;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:4px;margin-top:11px;}
+.modal input,.modal select{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-family:'Noto Sans JP',sans-serif;font-size:13px;color:var(--text);background:var(--bg);}
+.modal input:focus,.modal select:focus{outline:none;border-color:var(--text);background:#fff;}
+.form-row{display:flex;gap:8px;}
+.form-row>div{flex:1;}
+.modal-actions{display:flex;gap:6px;margin-top:18px;}
+.modal-actions button{flex:1;padding:9px;border:none;border-radius:7px;font-family:'Noto Sans JP',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s;}
+.modal-actions button:hover{opacity:.85;}
+.btn-save{background:var(--text);color:#fff;}
+.btn-delete{background:#fee2e2;color:#b91c1c;}
+.btn-cancel{background:var(--bg);color:var(--text);border:1px solid var(--border)!important;}
+
+/* CONFIRM MODAL */
+.confirm-modal{width:300px;}
+.confirm-modal p{font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.7;}
+
+/* COLOR SWATCHES */
+.color-swatches{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;}
+.swatch{width:24px;height:24px;border-radius:5px;cursor:pointer;border:2px solid transparent;transition:transform .1s;}
+.swatch:hover{transform:scale(1.15);}
+.swatch.selected{border-color:var(--text);}
+
+/* SHARE PANEL */
+.share-info{background:#f0f4fa;border-radius:8px;padding:10px;font-size:11px;color:#3060a0;line-height:1.7;margin-top:10px;}
+.share-url{word-break:break-all;font-family:monospace;font-size:10px;background:#e0e8f8;padding:4px 6px;border-radius:4px;margin-top:4px;}
+
+/* DEPT LIST */
+.dept-list-item{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);}
+.dept-list-item:last-child{border-bottom:none;}
+.dept-color-dot{width:12px;height:12px;border-radius:3px;flex-shrink:0;}
+.dept-name-txt{flex:1;font-size:12px;font-weight:600;}
+.dept-edit-btn{font-size:10px;color:var(--muted);padding:1px 5px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;}
+.dept-edit-btn:hover{color:var(--text);}
+
+/* TOAST */
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:8px 18px;border-radius:18px;font-size:12px;font-weight:500;box-shadow:0 4px 18px rgba(0,0,0,.3);z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
+.toast.show{opacity:1;}
+
+/* MOBILE */
+@media(max-width:700px){
+  .header{height:auto;min-height:44px;padding:6px 10px;gap:4px;}
+  .sidebar{position:fixed;bottom:0;left:0;right:0;top:auto;width:100%!important;min-width:0!important;max-height:45vh;border-right:none;border-top:2px solid var(--border);z-index:55;transform:translateY(100%);transition:transform .3s;opacity:1!important;}
+  .sidebar.open{transform:translateY(0)!important;}
+  .sidebar.collapsed{transform:translateY(100%);width:100%!important;}
+  .sidebar-toggle{display:none;}
+  .workspace{flex-direction:column;height:calc(100vh - 44px - var(--tab-h));}
+  .floor-wrapper{padding:8px;}
+  .mobile-sidebar-toggle{display:flex!important;}
+  :root{--header-h:44px;}
+}
+.mobile-sidebar-toggle{display:none;padding:5px 11px;border:1px solid rgba(255,255,255,.25);border-radius:6px;background:transparent;color:#fff;font-size:12px;cursor:pointer;}
+
+/* LOGIN SCREEN */
+.login-screen{position:fixed;inset:0;background:var(--bg);z-index:500;display:flex;align-items:center;justify-content:center;}
+.login-box{background:var(--panel);border-radius:18px;padding:36px 32px;width:340px;max-width:95vw;box-shadow:0 24px 64px rgba(0,0,0,.18);text-align:center;}
+.login-box h1{font-family:'Zen Kaku Gothic New',sans-serif;font-size:18px;font-weight:900;margin-bottom:4px;}
+.login-box p{font-size:12px;color:var(--muted);margin-bottom:24px;}
+.login-box input{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Noto Sans JP',sans-serif;font-size:14px;color:var(--text);background:var(--bg);margin-bottom:10px;}
+.login-box input:focus{outline:none;border-color:var(--text);background:#fff;}
+.login-submit{width:100%;padding:11px;border:none;border-radius:9px;background:var(--text);color:#fff;font-family:'Noto Sans JP',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:opacity .2s;}
+.login-submit:hover{opacity:.85;}
+.login-submit:disabled{opacity:.5;cursor:not-allowed;}
+.login-error{color:#b91c1c;font-size:12px;margin-top:8px;min-height:18px;}
+.login-logo{font-size:36px;margin-bottom:12px;}
+
+/* PRINT */
+@media print{
+  .header,.floor-tabs,.sidebar,.modal-overlay,.resize-handle,.toast,.sidebar-toggle{display:none!important;}
+  body{background:white;}
+  .workspace{height:auto;}
+  .floor-wrapper{padding:0;}
+  .floor{box-shadow:none;border:1.5px solid #888;overflow:visible;}
+  .desk,.zone,.wall{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">🏥</div>
+    <h1>ゆずりは訪問診療所</h1>
+    <p>座席表システムにログインしてください</p>
+    <input type="email" id="loginEmail" placeholder="メールアドレス" autocomplete="email">
+    <input type="password" id="loginPassword" placeholder="パスワード" autocomplete="current-password">
+    <button class="login-submit" id="loginBtn" onclick="doLogin()">ログイン</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <span class="header-title">🏥 ゆずりは訪問診療所</span>
+  <div class="sep"></div>
+  <button class="tb-btn" onclick="openAddDeskModal()">＋座席</button>
+  <button class="tb-btn" onclick="addWall()">＋壁</button>
+  <button class="tb-btn" onclick="addDoor()">＋扉</button>
+  <button class="tb-btn" onclick="openAddZoneModal()">＋エリア</button>
+  <button class="tb-btn" onclick="openDeptManager()">部署管理</button>
+  <div class="sep"></div>
+  <button class="tb-btn" onclick="window.print()">🖨</button>
+  <button class="tb-btn" onclick="exportData()">💾 保存</button>
+  <button class="tb-btn" onclick="importData()">📂 読込</button>
+  <button class="tb-btn" onclick="openShareModal()">🔗 共有</button>
+  <button class="tb-btn danger" onclick="openConfirm('全データを初期状態に戻しますか？', resetAll)">↩ リセット</button>
+  <span id="sharedBadge" class="shared-badge offline"><span class="sync-dot offline" id="syncDot"></span><span id="syncLabel">共有OFF</span></span>
+  <button class="mobile-sidebar-toggle" onclick="toggleMobileSidebar()">☰</button>
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="modeEdit" onclick="setMode('edit')">✏ 編集</button>
+    <button class="mode-btn" id="modeView" onclick="setMode('view')">👁 表示</button>
+  </div>
+</div>
+
+<!-- FLOOR TABS -->
+<div class="floor-tabs">
+  <div class="floor-tab active" id="tab1f" onclick="switchFloor('1f')">1F <span class="tab-count" id="count1f">0</span></div>
+  <div class="floor-tab" id="tab2f" onclick="switchFloor('2f')">2F <span class="tab-count" id="count2f">0</span></div>
+</div>
+
+<div class="workspace">
+  <!-- SIDEBAR TOGGLE (fixed, always visible) -->
+  <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="サイドバーを開閉">◀</button>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <h3>スタッフ</h3>
+      <div id="staffList"></div>
+      <button class="add-btn" onclick="openAddDeskModal()">＋ 追加</button>
+    </div>
+    <div class="sidebar-section">
+      <h3>エリア</h3>
+      <div id="zoneList"></div>
+      <button class="add-btn" onclick="openAddZoneModal()">＋ 追加</button>
+    </div>
+    <div class="sidebar-section">
+      <h3>凡例</h3>
+      <div id="legend"></div>
+    </div>
+  </div>
+  <!-- FLOOR -->
+  <div class="floor-wrapper">
+    <div class="floor" id="floor"
+      ondragover="onFloorDragOver(event)"
+      ondrop="onFloorDrop(event)"
+      ondragleave="onFloorDragLeave()">
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODALS ══ -->
+
+<!-- DESK MODAL -->
+<div class="modal-overlay" id="deskModal">
+  <div class="modal">
+    <h3 id="deskModalTitle">座席を編集</h3>
+    <label>名前</label><input type="text" id="deskName" placeholder="例：山田">
+    <label>部署</label>
+    <select id="deskDept"></select>
+    <div class="modal-actions">
+      <button class="btn-save" onclick="saveDeskModal()">保存</button>
+      <button class="btn-delete" id="deskBtnDel" onclick="confirmDeleteDesk()">削除</button>
+      <button class="btn-cancel" onclick="closeModal('deskModal')">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- ZONE MODAL -->
+<div class="modal-overlay" id="zoneModal">
+  <div class="modal">
+    <h3 id="zoneModalTitle">エリアを編集</h3>
+    <label>名前</label><input type="text" id="zoneName" placeholder="例：会議室">
+    <label>種類</label>
+    <select id="zoneType">
+      <option value="default">一般</option>
+      <option value="toilet">トイレ</option>
+      <option value="storage">収納・棚</option>
+      <option value="entrance">玄関・出入口</option>
+      <option value="lounge">休憩室</option>
+      <option value="nursing">医療・看護</option>
+      <option value="consult">相談室</option>
+      <option value="stairs">階段</option>
+    </select>
+    <div class="form-row" style="margin-top:10px;">
+      <div><label>幅(px)</label><input type="number" id="zoneW" min="40" max="500" value="120"></div>
+      <div><label>高さ(px)</label><input type="number" id="zoneH" min="30" max="400" value="100"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-save" onclick="saveZoneModal()">保存</button>
+      <button class="btn-delete" id="zoneBtnDel" onclick="confirmDeleteZone()">削除</button>
+      <button class="btn-cancel" onclick="closeModal('zoneModal')">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- WALL MODAL -->
+<div class="modal-overlay" id="wallModal">
+  <div class="modal">
+    <h3 id="wallModalTitle">壁を編集</h3>
+    <div id="wallFields"></div>
+    <div class="modal-actions">
+      <button class="btn-save" onclick="saveWallModal()">保存</button>
+      <button class="btn-delete" onclick="confirmDeleteWall()">削除</button>
+      <button class="btn-cancel" onclick="closeModal('wallModal')">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- DEPT MANAGER MODAL -->
+<div class="modal-overlay" id="deptModal">
+  <div class="modal">
+    <h3>部署管理</h3>
+    <div id="deptList" style="margin-bottom:10px;max-height:260px;overflow-y:auto;"></div>
+    <button class="add-btn" onclick="openAddDeptForm()">＋ 部署を追加</button>
+    <div id="deptEditForm" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+      <label>部署名</label><input type="text" id="deptNameInput" placeholder="例：経理">
+      <label>テキストカラー</label>
+      <div class="color-swatches" id="deptColorSwatches"></div>
+      <input type="text" id="deptColorCustom" placeholder="#3060a0" style="margin-top:6px;" oninput="previewDeptColor()">
+      <div id="deptColorPreview" style="height:28px;border-radius:6px;margin-top:6px;border:1px solid var(--border);transition:background .2s;"></div>
+      <div class="modal-actions" style="margin-top:12px;">
+        <button class="btn-save" onclick="saveDept()">保存</button>
+        <button class="btn-delete" id="deptDelBtn" onclick="confirmDeleteDept()">削除</button>
+        <button class="btn-cancel" onclick="closeDeptForm()">キャンセル</button>
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-cancel" onclick="closeModal('deptModal')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHARE MODAL -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal">
+    <h3>🔗 共有方法</h3>
+    <p style="font-size:12px;color:var(--muted);line-height:1.7;">この座席表を他のメンバーと共有する方法を選んでください。</p>
+
+    <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">
+      <div style="background:#f0f4fa;border-radius:10px;padding:12px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;">💾 JSONファイルで共有</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">データをファイルに書き出し、メール・チャット等で送付。受け取った方は「読込」で反映。</div>
+        <button class="tb-btn" style="background:#2c2825;font-size:12px;" onclick="exportData()">💾 ファイルをダウンロード</button>
+      </div>
+
+      <div style="background:#f0faf4;border-radius:10px;padding:12px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;">☁ クラウド自動同期（同じ端末のみ）</div>
+        <div id="syncStatus" style="font-size:11px;color:var(--muted);margin-bottom:4px;"></div>
+        <div id="syncBtnArea"></div>
+      </div>
+
+      <div style="background:#faf8f0;border-radius:10px;padding:12px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;">📋 クリップボードにコピー</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">データをテキストでコピー。他の端末でアプリを開き「貼り付け読込」で反映。</div>
+        <div style="display:flex;gap:6px;">
+          <button class="tb-btn" style="background:#2c2825;font-size:12px;" onclick="copyToClipboard()">📋 コピー</button>
+          <button class="tb-btn" style="background:#2c2825;font-size:12px;" onclick="pasteFromClipboard()">📥 貼り付け読込</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-cancel" onclick="closeModal('shareModal')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal confirm-modal">
+    <h3>⚠ 確認</h3>
+    <p id="confirmMsg"></p>
+    <div class="modal-actions">
+      <button class="btn-delete" id="confirmOkBtn">はい、削除</button>
+      <button class="btn-cancel" onclick="closeModal('confirmModal')">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══ SUPABASE CONFIG ══
+const SB_URL = 'https://olizageuupfbfdbsxzuk.supabase.co';
+const SB_KEY = 'sb_publishable_HiBSHVWdE5DPQ6ZnaLwokA_aoXD2IIL';
+let sbToken = null; // JWT after login
+let realtimeChannel = null;
+let isSaving = false; // prevent echo loop
+
+const sbHeaders = () => ({
+  'Content-Type': 'application/json',
+  'apikey': SB_KEY,
+  'Authorization': 'Bearer ' + sbToken,
+});
+
+// ── Login ──
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw    = document.getElementById('loginPassword').value;
+  const btn   = document.getElementById('loginBtn');
+  const err   = document.getElementById('loginError');
+  if (!email || !pw) { err.textContent = 'メールアドレスとパスワードを入力してください'; return; }
+  btn.disabled = true; btn.textContent = 'ログイン中…'; err.textContent = '';
+  try {
+    const res = await axios.post(`${SB_URL}/auth/v1/token?grant_type=password`,
+      { email, password: pw },
+      { headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' } }
+    );
+    sbToken = res.data.access_token;
+    document.getElementById('loginScreen').style.display = 'none';
+    showToast('✅ ログインしました');
+    await initAfterLogin();
+  } catch(e) {
+    err.textContent = 'ログインに失敗しました。メールアドレスまたはパスワードを確認してください。';
+    btn.disabled = false; btn.textContent = 'ログイン';
+  }
+}
+
+// Enter key on login
+document.addEventListener('DOMContentLoaded', () => {
+  ['loginEmail','loginPassword'].forEach(id => {
+    document.getElementById(id)?.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+  });
+});
+
+// ── Load from Supabase ──
+async function loadFromSupabase() {
+  const res = await axios.get(
+    `${SB_URL}/rest/v1/zaseki_data?id=eq.main&select=payload`,
+    { headers: sbHeaders() }
+  );
+  const row = res.data[0];
+  if (row && row.payload && row.payload.data && row.payload.data['1f']) {
+    data  = row.payload.data;
+    depts = row.payload.depts || [...DEFAULT_DEPTS];
+    return true;
+  }
+  return false;
+}
+
+// ── Save to Supabase ──
+async function saveToSupabase() {
+  if (isSaving) return;
+  isSaving = true;
+  try {
+    await axios.patch(
+      `${SB_URL}/rest/v1/zaseki_data?id=eq.main`,
+      { payload: { data, depts }, updated_at: new Date().toISOString() },
+      { headers: { ...sbHeaders(), 'Prefer': 'return=minimal' } }
+    );
+  } catch(e) { console.error('save error', e); }
+  setTimeout(() => { isSaving = false; }, 300);
+}
+
+// ── Realtime subscription ──
+function subscribeRealtime() {
+  // Supabase Realtime via WebSocket
+  const wsUrl = SB_URL.replace('https://', 'wss://') + '/realtime/v1/websocket?apikey=' + SB_KEY + '&vsn=1.0.0';
+  const ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ topic: 'realtime:public:zaseki_data', event: 'phx_join', payload: { config: { broadcast: { self: false }, postgres_changes: [{ event: 'UPDATE', schema: 'public', table: 'zaseki_data' }] } }, ref: '1' }));
+    // heartbeat
+    setInterval(() => { if(ws.readyState===1) ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:'hb'})); }, 25000);
+  };
+
+  ws.onmessage = async (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.event === 'postgres_changes' || (msg.payload?.data?.type === 'UPDATE')) {
+        if (isSaving) return; // own update, skip
+        await loadFromSupabase();
+        render();
+        showToast('🔄 他の端末から更新されました');
+      }
+    } catch(err) {}
+  };
+
+  ws.onclose = () => {
+    // reconnect after 3s
+    setTimeout(() => { if(sbToken) subscribeRealtime(); }, 3000);
+  };
+}
+
+// ── After login init ──
+async function initAfterLogin() {
+  const loaded = await loadFromSupabase();
+  if (!loaded) {
+    // first time: push defaults
+    data  = deepCopy(DEFAULT_DATA);
+    depts = [...DEFAULT_DEPTS];
+    await saveToSupabase();
+  }
+  // also persist locally
+  try { localStorage.setItem('yuz_v4', JSON.stringify({data,depts})); } catch(e){}
+  updateFloorSize();
+  render();
+  subscribeRealtime();
+  updateSyncBadge(true);
+}
+
+// ══ DEPT DEFAULTS ══
+const DEFAULT_DEPT_COLORS = [
+  {text:'#b03020',bg:'#fff0ed',border:'#e07060'},
+  {text:'#1a7a45',bg:'#edfaf2',border:'#4caf7d'},
+  {text:'#8a6200',bg:'#fffbeb',border:'#d4a017'},
+  {text:'#3a3aaa',bg:'#f0f0ff',border:'#7070d0'},
+  {text:'#8a1a68',bg:'#fff0fa',border:'#c060a0'},
+  {text:'#904010',bg:'#fff8f0',border:'#d07030'},
+  {text:'#107040',bg:'#e8f8f0',border:'#30a870'},
+  {text:'#5020a0',bg:'#f0e8ff',border:'#9060d0'},
+  {text:'#1030a0',bg:'#e8f0ff',border:'#4060d0'},
+  {text:'#a01050',bg:'#ffe8f0',border:'#d04080'},
+  {text:'#407010',bg:'#f8ffe8',border:'#80c030'},
+  {text:'#806010',bg:'#fff8e8',border:'#c09030'},
+  {text:'#106090',bg:'#e8f8ff',border:'#3090c0'},
+  {text:'#444444',bg:'#f4f4f4',border:'#aaaaaa'},
+];
+
+const DEFAULT_DEPTS = [
+  {id:'d_診療レセ',  name:'診療レセ',   ...DEFAULT_DEPT_COLORS[0]},
+  {id:'d_総務',      name:'総務',        ...DEFAULT_DEPT_COLORS[1]},
+  {id:'d_人事',      name:'人事',        ...DEFAULT_DEPT_COLORS[2]},
+  {id:'d_SE',        name:'SE',          ...DEFAULT_DEPT_COLORS[3]},
+  {id:'d_介護事務',  name:'介護事務',    ...DEFAULT_DEPT_COLORS[4]},
+  {id:'d_事務長',    name:'事務長',      ...DEFAULT_DEPT_COLORS[5]},
+  {id:'d_CC',        name:'CC・相談員',  ...DEFAULT_DEPT_COLORS[6]},
+  {id:'d_MP',        name:'MP',          ...DEFAULT_DEPT_COLORS[7]},
+  {id:'d_医師',      name:'診療医師',    ...DEFAULT_DEPT_COLORS[8]},
+  {id:'d_看護師',    name:'看護師',      ...DEFAULT_DEPT_COLORS[9]},
+  {id:'d_栄養士',    name:'栄養士',      ...DEFAULT_DEPT_COLORS[10]},
+  {id:'d_診療部秘書',name:'診療部秘書',  ...DEFAULT_DEPT_COLORS[11]},
+  {id:'d_検査',      name:'検査',        ...DEFAULT_DEPT_COLORS[12]},
+  {id:'d_',          name:'(未設定)',     ...DEFAULT_DEPT_COLORS[13]},
+];
+
+const SWATCH_COLORS = [
+  '#e07060','#e07030','#d0a020','#80c030','#30a870','#30a0c0',
+  '#4060d0','#9060d0','#c060a0','#d04080','#6a6058','#444444',
+];
+
+const ZONE_STYLES = {
+  default:{bg:'#f0ece6',border:'#c8c0b4',text:'#7a7068'},
+  toilet: {bg:'#e8f4f8',border:'#90bcd0',text:'#3a7090'},
+  storage:{bg:'#eef5e8',border:'#88b870',text:'#3a7028'},
+  entrance:{bg:'#fdf5e0',border:'#d0b060',text:'#806820'},
+  lounge: {bg:'#f8eef4',border:'#c898b8',text:'#7a3868'},
+  nursing:{bg:'#e8f0f8',border:'#8098c0',text:'#304878'},
+  consult:{bg:'#f4eef8',border:'#a888c8',text:'#583878'},
+  stairs: {bg:'#eeece8',border:'#b0a898',text:'#5a5248'},
+};
+
+const FLOORS = {'1f':{w:900,h:580},'2f':{w:900,h:580}};
+
+// ══ DEFAULT MAP DATA ══
+const DEFAULT_DATA = {
+  '1f':{
+    zones:[
+      {id:'1z1',name:'トイレ',     type:'toilet',  x:4,  y:4,  w:108,h:108},
+      {id:'1z2',name:'診療物品棚', type:'storage', x:200,y:4,  w:72, h:118},
+      {id:'1z3',name:'診療物品棚', type:'storage', x:278,y:4,  w:72, h:118},
+      {id:'1z4',name:'トイレ',     type:'toilet',  x:358,y:4,  w:138,h:100},
+      {id:'1z5',name:'階段',       type:'stairs',  x:580,y:4,  w:90, h:70},
+      {id:'1z6',name:'玄関',       type:'entrance',x:750,y:4,  w:146,h:100},
+      {id:'1z7',name:'休憩室',     type:'lounge',  x:4,  y:220,w:180,h:148},
+      {id:'1z8',name:'訪問看護\nor 定期巡回',type:'nursing',x:296,y:220,w:190,h:160},
+      {id:'1z9',name:'相談室',     type:'consult', x:750,y:220,w:146,h:160},
+    ],
+    walls:[
+      {id:'1w1',dir:'h',x:116,y:112,len:80},
+      {id:'1w2',dir:'v',x:188,y:220,len:148},
+      {id:'1w3',dir:'v',x:490,y:220,len:160},
+      {id:'1w4',dir:'v',x:744,y:4,  len:370},
+    ],
+    doors:[
+      {id:'1d1',x:726,y:76, size:48,dir:'left'},
+      {id:'1d2',x:108,y:356,size:44,dir:'right'},
+    ],
+    desks:[
+      {id:'1p太田',   name:'太田',   dept:'',        x:534,y:130},
+      {id:'1p新垣',   name:'新垣',   dept:'診療レセ',x:628,y:130},
+      {id:'1p上村',   name:'上村',   dept:'診療レセ',x:534,y:210},
+      {id:'1p比嘉',   name:'比嘉',   dept:'診療レセ',x:628,y:210},
+      {id:'1p親川',   name:'親川',   dept:'診療レセ',x:722,y:210},
+      {id:'1p田中',   name:'田中',   dept:'介護事務',x:534,y:400},
+      {id:'1p山城',   name:'山城',   dept:'人事',    x:196,y:210},
+      {id:'1p石立',   name:'石立',   dept:'総務',    x:290,y:210},
+      {id:'1p金城',   name:'金城',   dept:'総務',    x:4,  y:390},
+      {id:'1p武田',   name:'武田',   dept:'SE',      x:98, y:390},
+      {id:'1p具志堅', name:'具志堅', dept:'SE',      x:4,  y:466},
+      {id:'1p小渡',   name:'小渡',   dept:'人事',    x:98, y:466},
+      {id:'1p諸見里', name:'諸見里', dept:'事務長',  x:196,y:466},
+    ],
+  },
+  '2f':{
+    zones:[
+      {id:'2z1',name:'階段',       type:'stairs',  x:4,  y:4,  w:90, h:70},
+      {id:'2z2',name:'棚',         type:'storage', x:106,y:4,  w:80, h:80},
+      {id:'2z3',name:'検査室',     type:'nursing', x:4,  y:220,w:160,h:140},
+      {id:'2z4',name:'診療部秘書\n栄養士',type:'consult',x:600,y:220,w:180,h:140},
+    ],
+    walls:[
+      {id:'2w1',dir:'v',x:168,y:0,  len:200},
+      {id:'2w2',dir:'v',x:594,y:220,len:140},
+      {id:'2w3',dir:'h',x:0,  y:214,len:900},
+    ],
+    doors:[{id:'2d1',x:500,y:170,size:44,dir:'left'}],
+    desks:[
+      {id:'2p辺田',   name:'辺田',   dept:'',    x:200,y:20},
+      {id:'2p新崎',   name:'新崎',   dept:'',    x:290,y:20},
+      {id:'2p高良',   name:'高良',   dept:'CC・相談員',x:380,y:20},
+      {id:'2p上地',   name:'上地',   dept:'MP',  x:470,y:20},
+      {id:'2p平',     name:'平',     dept:'',    x:560,y:20},
+      {id:'2p神里',   name:'神里',   dept:'',    x:650,y:20},
+      {id:'2p與那嶺1',name:'與那嶺', dept:'MP',  x:740,y:20},
+      {id:'2p大城ま', name:'大城(ま)',dept:'',   x:810,y:20},
+      {id:'2p新城',   name:'新城',   dept:'',    x:200,y:110},
+      {id:'2p大濱',   name:'大濱',   dept:'',    x:290,y:110},
+      {id:'2p大城2',  name:'大城',   dept:'',    x:380,y:110},
+      {id:'2p又吉',   name:'又吉',   dept:'',    x:470,y:110},
+      {id:'2p喜納',   name:'喜納',   dept:'',    x:560,y:110},
+      {id:'2p春日',   name:'春日',   dept:'診療医師',x:650,y:110},
+      {id:'2p波平',   name:'波平',   dept:'',    x:740,y:110},
+      {id:'2p與那嶺2',name:'與那嶺', dept:'CC・相談員',x:200,y:310},
+      {id:'2p大城は', name:'大城(は)',dept:'',   x:290,y:310},
+      {id:'2p大山',   name:'大山',   dept:'',    x:380,y:310},
+      {id:'2p垣花',   name:'垣花',   dept:'',    x:470,y:310},
+      {id:'2p藤嶋',   name:'藤嶋',   dept:'',    x:560,y:310},
+      {id:'2p名嘉',   name:'名嘉',   dept:'MP',  x:650,y:310},
+      {id:'2p新垣清', name:'新垣(清)',dept:'総務',x:740,y:310},
+      {id:'2p儀保',   name:'儀保',   dept:'',    x:200,y:390},
+    ],
+  },
+};
+
+// ══ STATE ══
+let currentFloor = '1f';
+let mode = 'edit';
+let data = {};
+let depts = [];
+let dragState = null;
+let editDeskId=null, isNewDesk=false;
+let editZoneId=null, isNewZone=false;
+let editWallId=null, isNewWall=false, editWallIsDoor=false;
+let editDeptId=null, isNewDept=false;
+let confirmCallback=null;
+let sidebarCollapsed=false;
+
+// ══ HELPERS ══
+const fd = () => data[currentFloor];
+const getDeptStyle = name => depts.find(d=>d.name===name) || depts.find(d=>d.name==='(未設定)') || {bg:'#f4f4f4',border:'#aaaaaa',text:'#444444'};
+const zs = type => ZONE_STYLES[type] || ZONE_STYLES['default'];
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+
+// ══ PERSIST (local + Supabase) ══
+function persist() {
+  try { localStorage.setItem('yuz_v4', JSON.stringify({data,depts})); } catch(e){}
+  if (sbToken) saveToSupabase();
+}
+
+// ══ INIT ══
+function init() {
+  // Show login screen; app boots after successful login
+  // Try local cache for instant display while waiting
+  const saved = (() => { try{ const s=localStorage.getItem('yuz_v4'); return s?JSON.parse(s):null; }catch(e){return null;} })();
+  if (saved?.data?.['1f'] && saved?.data?.['2f']) {
+    data  = saved.data;
+    depts = saved.depts || [...DEFAULT_DEPTS];
+    updateFloorSize();
+    render();
+  } else {
+    data  = deepCopy(DEFAULT_DATA);
+    depts = [...DEFAULT_DEPTS];
+  }
+  // focus email field
+  setTimeout(() => document.getElementById('loginEmail')?.focus(), 200);
+}
+
+// ══ (removed old shared storage – replaced by Supabase) ══
+function updateSyncBadge(online) {
+  const badge=document.getElementById('sharedBadge'),dot=document.getElementById('syncDot'),label=document.getElementById('syncLabel');
+  badge.className='shared-badge'+(online?'':' offline');
+  dot.className='sync-dot'+(online?'':' offline');
+  label.textContent=online?'同期中':'未接続';
+}
+const deepCopy = o => JSON.parse(JSON.stringify(o));
+
+// ══ FLOOR ══
+function switchFloor(f) {
+  currentFloor=f;
+  document.getElementById('tab1f').classList.toggle('active',f==='1f');
+  document.getElementById('tab2f').classList.toggle('active',f==='2f');
+  updateFloorSize(); render();
+}
+function updateFloorSize() {
+  const fl=document.getElementById('floor'), fd_=FLOORS[currentFloor];
+  fl.style.width=fd_.w+'px'; fl.style.height=fd_.h+'px';
+}
+
+// ══ RENDER ══
+function render() { renderFloor(); renderSidebar(); updateTabCounts(); }
+
+function renderFloor() {
+  const floor=document.getElementById('floor');
+  floor.querySelectorAll('.zone,.wall,.door,.desk').forEach(e=>e.remove());
+  fd().zones.forEach(renderZoneEl);
+  fd().walls.forEach(renderWallEl);
+  fd().doors.forEach(renderDoorEl);
+  fd().desks.forEach(renderDeskEl);
+}
+
+function renderZoneEl(z) {
+  const floor=document.getElementById('floor'), st=zs(z.type);
+  const el=document.createElement('div');
+  el.className='zone'+(mode==='edit'?' edit-mode':'');
+  el.id='zone_'+z.id;
+  el.style.cssText=`left:${z.x}px;top:${z.y}px;width:${z.w}px;height:${z.h}px;background:${st.bg};border-color:${st.border};color:${st.text};`;
+  el.innerHTML=z.name.replace(/\n/g,'<br>');
+  if(mode==='edit'){
+    el.addEventListener('mousedown',e=>{ if(!e.target.classList.contains('resize-handle')) startDrag(e,el,z,'zone'); });
+    el.addEventListener('dblclick',()=>openEditZoneModal(z.id));
+    el.addEventListener('touchstart',e=>startTouchDrag(e,el,z,'zone'),{passive:false});
+    const rh=document.createElement('div');
+    rh.className='resize-handle';
+    rh.addEventListener('mousedown',e=>{e.stopPropagation();startResize(e,el,z);});
+    el.appendChild(rh);
+  }
+  floor.appendChild(el);
+}
+
+function renderWallEl(w) {
+  const floor=document.getElementById('floor');
+  const el=document.createElement('div');
+  el.className='wall '+w.dir+(mode==='edit'?' edit-mode':'');
+  el.id='wall_'+w.id;
+  el.style.cssText=w.dir==='h'?`left:${w.x}px;top:${w.y}px;width:${w.len}px;`:`left:${w.x}px;top:${w.y}px;height:${w.len}px;`;
+  if(mode==='edit'){
+    el.addEventListener('mousedown',e=>startDrag(e,el,w,'wall'));
+    el.addEventListener('dblclick',()=>openEditWallModal(w.id,false));
+    el.addEventListener('touchstart',e=>startTouchDrag(e,el,w,'wall'),{passive:false});
+  }
+  floor.appendChild(el);
+}
+
+function renderDoorEl(d) {
+  const floor=document.getElementById('floor');
+  const el=document.createElement('div');
+  el.className='door'+(mode==='edit'?' edit-mode':'');
+  el.id='door_'+d.id;
+  el.style.cssText=`left:${d.x}px;top:${d.y}px;width:${d.size}px;height:${d.size}px;`;
+  const s=d.size;
+  el.innerHTML=d.dir==='left'
+    ?`<div style="position:absolute;left:0;bottom:0;width:${s}px;height:${s}px;border-top:2px solid #c07840;border-right:2px solid #c07840;border-radius:0 ${s}px 0 0;background:rgba(255,220,160,.2);"></div><div style="position:absolute;left:0;bottom:0;width:2px;height:${s}px;background:#c07840;border-radius:2px;"></div>`
+    :`<div style="position:absolute;right:0;bottom:0;width:${s}px;height:${s}px;border-top:2px solid #c07840;border-left:2px solid #c07840;border-radius:${s}px 0 0 0;background:rgba(255,220,160,.2);"></div><div style="position:absolute;right:0;bottom:0;width:2px;height:${s}px;background:#c07840;border-radius:2px;"></div>`;
+  if(mode==='edit'){
+    el.addEventListener('mousedown',e=>startDrag(e,el,d,'door'));
+    el.addEventListener('dblclick',()=>openEditWallModal(d.id,true));
+    el.addEventListener('touchstart',e=>startTouchDrag(e,el,d,'door'),{passive:false});
+  }
+  floor.appendChild(el);
+}
+
+function renderDeskEl(p) {
+  const floor=document.getElementById('floor');
+  const st=getDeptStyle(p.dept);
+  const el=document.createElement('div');
+  el.className='desk'+(mode==='edit'?' edit-mode':'');
+  el.id='desk_'+p.id;
+  el.style.cssText=`left:${p.x}px;top:${p.y}px;background:${st.bg};border-color:${st.border};`;
+  el.innerHTML=`<span class="desk-name" style="color:${st.text}">${p.name}</span><span class="desk-dept" style="color:${st.text}">${p.dept||''}</span>`;
+  if(mode==='edit'){
+    // PCはダブルクリックで編集、ドラッグで移動
+    el.addEventListener('dblclick', ()=>openEditDeskModal(p.id));
+    el.addEventListener('mousedown',e=>startDrag(e,el,p,'desk'));
+    el.addEventListener('touchstart',e=>startTouchDrag(e,el,p,'desk'),{passive:false});
+  }
+  floor.appendChild(el);
+}
+
+function renderSidebar() {
+  // スタッフ
+  const list=document.getElementById('staffList');
+  list.innerHTML='';
+  fd().desks.forEach(p=>{
+    const st=getDeptStyle(p.dept);
+    const item=document.createElement('div');
+    item.className='staff-item on-floor';
+    item.innerHTML=`<div class="staff-dot" style="background:${st.border}"></div><span class="staff-name-txt">${p.name}</span><span class="staff-dept-tag" style="background:${st.bg};color:${st.text};border:1px solid ${st.border}">${p.dept||'─'}</span>`;
+    list.appendChild(item);
+  });
+  // エリア
+  const zl=document.getElementById('zoneList');
+  zl.innerHTML='';
+  fd().zones.forEach(z=>{
+    const st=zs(z.type);
+    const item=document.createElement('div');
+    item.className='zone-list-item';
+    item.innerHTML=`<div class="zone-list-dot" style="background:${st.bg};border-color:${st.border}"></div><span style="flex:1;font-size:11px;">${z.name.replace(/\n/g,' ')}</span>`;
+    if(mode==='edit'){
+      const btn=document.createElement('button'); btn.className='zone-edit-btn'; btn.textContent='編集';
+      btn.onclick=()=>openEditZoneModal(z.id);
+      item.appendChild(btn);
+    }
+    zl.appendChild(item);
+  });
+  // 凡例
+  const leg=document.getElementById('legend');
+  leg.innerHTML='';
+  [...new Set(fd().desks.map(d=>d.dept))].forEach(dept=>{
+    const st=getDeptStyle(dept);
+    const item=document.createElement('div'); item.className='legend-item';
+    item.innerHTML=`<div class="legend-dot" style="background:${st.bg};border:1.5px solid ${st.border}"></div><span style="color:${st.text}">${dept||'未設定'}</span>`;
+    leg.appendChild(item);
+  });
+}
+
+function updateTabCounts() {
+  document.getElementById('count1f').textContent=data['1f'].desks.length;
+  document.getElementById('count2f').textContent=data['2f'].desks.length;
+}
+
+// ══ DRAG (mouse) ══
+function startDrag(e, el, obj, type) {
+  if(e.button!==0) return;
+  e.preventDefault(); e.stopPropagation();
+  const floor=document.getElementById('floor'), er=el.getBoundingClientRect();
+  dragState={type,obj,el,offsetX:e.clientX-er.left,offsetY:e.clientY-er.top,moved:false,startX:obj.x,startY:obj.y};
+  el.classList.add('dragging');
+  const onMove=e=>{
+    if(!dragState)return;
+    const fr=floor.getBoundingClientRect();
+    const maxX=floor.offsetWidth-(el.offsetWidth||6), maxY=floor.offsetHeight-(el.offsetHeight||6);
+    const nx=Math.round(Math.max(0,Math.min(maxX,e.clientX-fr.left-dragState.offsetX)));
+    const ny=Math.round(Math.max(0,Math.min(maxY,e.clientY-fr.top-dragState.offsetY)));
+    if(Math.abs(nx-dragState.startX)>3||Math.abs(ny-dragState.startY)>3) dragState.moved=true;
+    obj.x=nx; obj.y=ny;
+    el.style.left=obj.x+'px'; el.style.top=obj.y+'px';
+  };
+  const onUp=()=>{
+    el.classList.remove('dragging');
+    if(dragState?.moved) persist();
+    dragState=null;
+    document.removeEventListener('mousemove',onMove);
+    document.removeEventListener('mouseup',onUp);
+  };
+  document.addEventListener('mousemove',onMove);
+  document.addEventListener('mouseup',onUp);
+}
+
+// ══ TOUCH DRAG ══
+function startTouchDrag(e, el, obj, type) {
+  e.preventDefault();
+  const floor=document.getElementById('floor'), t=e.touches[0];
+  const er=el.getBoundingClientRect();
+  const offsetX=t.clientX-er.left, offsetY=t.clientY-er.top;
+  let moved=false, startX=obj.x, startY=obj.y;
+  el.classList.add('dragging');
+  const onMove=e=>{
+    const t=e.touches[0], fr=floor.getBoundingClientRect();
+    const maxX=floor.offsetWidth-(el.offsetWidth||6), maxY=floor.offsetHeight-(el.offsetHeight||6);
+    obj.x=Math.round(Math.max(0,Math.min(maxX,t.clientX-fr.left-offsetX)));
+    obj.y=Math.round(Math.max(0,Math.min(maxY,t.clientY-fr.top-offsetY)));
+    el.style.left=obj.x+'px'; el.style.top=obj.y+'px';
+    if(Math.abs(obj.x-startX)>3||Math.abs(obj.y-startY)>3) moved=true;
+  };
+  const onEnd=()=>{
+    el.classList.remove('dragging');
+    if(moved) persist();
+    else {
+      if(type==='desk') openEditDeskModal(obj.id);
+      else if(type==='zone') openEditZoneModal(obj.id);
+      else openEditWallModal(obj.id, type==='door');
+    }
+    el.removeEventListener('touchmove',onMove);
+    el.removeEventListener('touchend',onEnd);
+  };
+  el.addEventListener('touchmove',onMove,{passive:false});
+  el.addEventListener('touchend',onEnd);
+}
+
+// ══ RESIZE ZONE ══
+function startResize(e, el, z) {
+  e.preventDefault(); e.stopPropagation();
+  const sx=e.clientX, sy=e.clientY, sw=z.w, sh=z.h;
+  const onMove=e=>{ z.w=Math.max(40,sw+e.clientX-sx); z.h=Math.max(30,sh+e.clientY-sy); el.style.width=z.w+'px'; el.style.height=z.h+'px'; };
+  const onUp=()=>{ persist(); document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); };
+  document.addEventListener('mousemove',onMove);
+  document.addEventListener('mouseup',onUp);
+}
+
+// ══ WALLS/DOORS ══
+function addWall() { fd().walls.push({id:currentFloor+'w'+uid(),dir:'h',x:80,y:80,len:120}); persist(); render(); showToast('壁を追加。ドラッグで移動、ダブルクリックで編集'); }
+function addDoor() { fd().doors.push({id:currentFloor+'d'+uid(),x:200,y:100,size:48,dir:'left'}); persist(); render(); showToast('扉を追加。ダブルクリックで編集'); }
+
+function onFloorDragOver(e){ e.preventDefault(); document.getElementById('floor').classList.add('drag-over'); }
+function onFloorDragLeave(){ document.getElementById('floor').classList.remove('drag-over'); }
+function onFloorDrop(e){ e.preventDefault(); document.getElementById('floor').classList.remove('drag-over'); }
+
+// ══ SIDEBAR TOGGLE ══
+function toggleSidebar() {
+  sidebarCollapsed=!sidebarCollapsed;
+  const sb=document.getElementById('sidebar');
+  const btn=document.getElementById('sidebarToggle');
+  if(sidebarCollapsed){
+    sb.classList.add('collapsed');
+    btn.textContent='▶';
+    btn.style.left='0';
+    btn.title='サイドバーを開く';
+  } else {
+    sb.classList.remove('collapsed');
+    btn.textContent='◀';
+    btn.style.left='220px';
+    btn.title='サイドバーを閉じる';
+  }
+}
+function toggleMobileSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+
+// ══ MODE ══
+function setMode(m){
+  mode=m;
+  document.getElementById('modeEdit').classList.toggle('active',m==='edit');
+  document.getElementById('modeView').classList.toggle('active',m==='view');
+  render();
+}
+
+// ══ CONFIRM MODAL (replaces confirm()) ══
+function openConfirm(msg, cb, btnLabel='はい、削除') {
+  document.getElementById('confirmMsg').textContent=msg;
+  document.getElementById('confirmOkBtn').textContent=btnLabel;
+  confirmCallback=cb;
+  document.getElementById('confirmModal').classList.add('open');
+}
+document.getElementById('confirmOkBtn').onclick=()=>{
+  closeModal('confirmModal');
+  if(confirmCallback){ confirmCallback(); confirmCallback=null; }
+};
+
+// ══ DESK MODAL ══
+function populateDeptSelect(selectId, selected='') {
+  const sel=document.getElementById(selectId);
+  sel.innerHTML='';
+  const opt=document.createElement('option'); opt.value=''; opt.textContent='(未設定)'; sel.appendChild(opt);
+  depts.filter(d=>d.name!=='(未設定)').forEach(d=>{
+    const o=document.createElement('option'); o.value=d.name; o.textContent=d.name;
+    if(d.name===selected) o.selected=true;
+    sel.appendChild(o);
+  });
+  sel.value=selected;
+}
+function openAddDeskModal() {
+  editDeskId=null; isNewDesk=true;
+  document.getElementById('deskModalTitle').textContent='座席を追加';
+  document.getElementById('deskName').value='';
+  populateDeptSelect('deskDept','');
+  document.getElementById('deskBtnDel').style.display='none';
+  document.getElementById('deskModal').classList.add('open');
+  setTimeout(()=>document.getElementById('deskName').focus(),100);
+}
+function openEditDeskModal(id) {
+  editDeskId=id; isNewDesk=false;
+  const p=fd().desks.find(x=>x.id===id);
+  document.getElementById('deskModalTitle').textContent='座席を編集：'+p.name;
+  document.getElementById('deskName').value=p.name;
+  populateDeptSelect('deskDept',p.dept);
+  document.getElementById('deskBtnDel').style.display='';
+  document.getElementById('deskModal').classList.add('open');
+}
+function saveDeskModal() {
+  const name=document.getElementById('deskName').value.trim();
+  if(!name){ showToast('⚠ 名前を入力してください'); return; }
+  const dept=document.getElementById('deskDept').value;
+  if(isNewDesk){
+    fd().desks.push({id:currentFloor+'_'+uid(),name,dept,x:400,y:290});
+    showToast('✓ '+name+' を追加');
+  } else {
+    const p=fd().desks.find(x=>x.id===editDeskId); p.name=name; p.dept=dept;
+    showToast('✓ '+name+' を更新');
+  }
+  persist(); render(); closeModal('deskModal');
+}
+function confirmDeleteDesk() {
+  const p=fd().desks.find(x=>x.id===editDeskId);
+  openConfirm(p.name+' を削除しますか？', deleteDesk, '削除する');
+}
+function deleteDesk() {
+  const p=fd().desks.find(x=>x.id===editDeskId);
+  data[currentFloor].desks=fd().desks.filter(x=>x.id!==editDeskId);
+  persist(); render(); closeModal('deskModal');
+  showToast('🗑 '+p.name+' を削除しました');
+}
+
+// ══ ZONE MODAL ══
+function openAddZoneModal() {
+  editZoneId=null; isNewZone=true;
+  document.getElementById('zoneModalTitle').textContent='エリアを追加';
+  document.getElementById('zoneName').value='';
+  document.getElementById('zoneType').value='default';
+  document.getElementById('zoneW').value=120;
+  document.getElementById('zoneH').value=100;
+  document.getElementById('zoneBtnDel').style.display='none';
+  document.getElementById('zoneModal').classList.add('open');
+}
+function openEditZoneModal(id) {
+  editZoneId=id; isNewZone=false;
+  const z=fd().zones.find(x=>x.id===id);
+  document.getElementById('zoneModalTitle').textContent='エリアを編集';
+  document.getElementById('zoneName').value=z.name;
+  document.getElementById('zoneType').value=z.type;
+  document.getElementById('zoneW').value=z.w;
+  document.getElementById('zoneH').value=z.h;
+  document.getElementById('zoneBtnDel').style.display='';
+  document.getElementById('zoneModal').classList.add('open');
+}
+function saveZoneModal() {
+  const name=document.getElementById('zoneName').value.trim();
+  if(!name){ showToast('⚠ 名前を入力してください'); return; }
+  const type=document.getElementById('zoneType').value;
+  const w=parseInt(document.getElementById('zoneW').value)||120;
+  const h=parseInt(document.getElementById('zoneH').value)||100;
+  if(isNewZone){ fd().zones.push({id:currentFloor+'z'+uid(),name,type,x:50,y:50,w,h}); showToast('✓ エリアを追加'); }
+  else { const z=fd().zones.find(x=>x.id===editZoneId); z.name=name; z.type=type; z.w=w; z.h=h; showToast('✓ エリアを更新'); }
+  persist(); render(); closeModal('zoneModal');
+}
+function confirmDeleteZone() { openConfirm('このエリアを削除しますか？', deleteZone, '削除する'); }
+function deleteZone() {
+  data[currentFloor].zones=fd().zones.filter(x=>x.id!==editZoneId);
+  persist(); render(); closeModal('zoneModal'); showToast('🗑 エリアを削除しました');
+}
+
+// ══ WALL/DOOR MODAL ══
+function openEditWallModal(id, isDoor) {
+  editWallId=id; isNewWall=false; editWallIsDoor=isDoor;
+  if(isDoor){
+    const d=fd().doors.find(x=>x.id===id);
+    document.getElementById('wallModalTitle').textContent='扉を編集';
+    document.getElementById('wallFields').innerHTML=`
+      <label>向き</label>
+      <select id="doorDir"><option value="left"${d.dir==='left'?' selected':''}>左開き</option><option value="right"${d.dir==='right'?' selected':''}>右開き</option></select>
+      <label>サイズ(px)</label>
+      <input type="number" id="doorSize" min="20" max="120" value="${d.size}">`;
+  } else {
+    const w=fd().walls.find(x=>x.id===id);
+    document.getElementById('wallModalTitle').textContent='壁を編集';
+    document.getElementById('wallFields').innerHTML=`
+      <label>向き</label>
+      <select id="wallDir"><option value="h"${w.dir==='h'?' selected':''}>横（水平）</option><option value="v"${w.dir==='v'?' selected':''}>縦（垂直）</option></select>
+      <label>長さ(px)</label>
+      <input type="number" id="wallLen" min="20" max="800" value="${w.len}">`;
+  }
+  document.getElementById('wallModal').classList.add('open');
+}
+function saveWallModal() {
+  if(editWallIsDoor){ const d=fd().doors.find(x=>x.id===editWallId); d.dir=document.getElementById('doorDir').value; d.size=parseInt(document.getElementById('doorSize').value)||48; }
+  else { const w=fd().walls.find(x=>x.id===editWallId); w.dir=document.getElementById('wallDir').value; w.len=parseInt(document.getElementById('wallLen').value)||100; }
+  persist(); render(); closeModal('wallModal'); showToast('✓ 更新しました');
+}
+function confirmDeleteWall() { openConfirm('この'+(editWallIsDoor?'扉':'壁')+'を削除しますか？', deleteWall, '削除する'); }
+function deleteWall() {
+  if(editWallIsDoor) data[currentFloor].doors=fd().doors.filter(x=>x.id!==editWallId);
+  else data[currentFloor].walls=fd().walls.filter(x=>x.id!==editWallId);
+  persist(); render(); closeModal('wallModal'); showToast('🗑 削除しました');
+}
+
+// ══ DEPT MANAGER ══
+function openDeptManager() {
+  renderDeptList();
+  closeDeptForm();
+  document.getElementById('deptModal').classList.add('open');
+}
+function renderDeptList() {
+  const el=document.getElementById('deptList'); el.innerHTML='';
+  depts.filter(d=>d.name!=='(未設定)').forEach(d=>{
+    const item=document.createElement('div'); item.className='dept-list-item';
+    item.innerHTML=`<div class="dept-color-dot" style="background:${d.bg};border:2px solid ${d.border}"></div><span class="dept-name-txt" style="color:${d.text}">${d.name}</span>`;
+    const btn=document.createElement('button'); btn.className='dept-edit-btn'; btn.textContent='編集';
+    btn.onclick=()=>openEditDeptForm(d.id);
+    item.appendChild(btn);
+    el.appendChild(item);
+  });
+}
+function openAddDeptForm() {
+  isNewDept=true; editDeptId=null;
+  document.getElementById('deptNameInput').value='';
+  document.getElementById('deptColorCustom').value='#3060a0';
+  document.getElementById('deptDelBtn').style.display='none';
+  showDeptForm();
+}
+function openEditDeptForm(id) {
+  isNewDept=false; editDeptId=id;
+  const d=depts.find(x=>x.id===id);
+  document.getElementById('deptNameInput').value=d.name;
+  document.getElementById('deptColorCustom').value=d.border;
+  document.getElementById('deptDelBtn').style.display='';
+  renderSwatches(d.border);
+  updateDeptPreview(d.border);
+  showDeptForm();
+}
+function showDeptForm() {
+  renderSwatches(document.getElementById('deptColorCustom').value);
+  document.getElementById('deptEditForm').style.display='block';
+  updateDeptPreview(document.getElementById('deptColorCustom').value);
+}
+function closeDeptForm() { document.getElementById('deptEditForm').style.display='none'; }
+function renderSwatches(selected='') {
+  const el=document.getElementById('deptColorSwatches'); el.innerHTML='';
+  SWATCH_COLORS.forEach(c=>{
+    const s=document.createElement('div');
+    s.className='swatch'+(c===selected?' selected':'');
+    s.style.background=c;
+    s.title=c;
+    s.onclick=()=>{
+      document.getElementById('deptColorCustom').value=c;
+      el.querySelectorAll('.swatch').forEach(x=>x.classList.remove('selected'));
+      s.classList.add('selected');
+      updateDeptPreview(c);
+    };
+    el.appendChild(s);
+  });
+}
+function previewDeptColor() { updateDeptPreview(document.getElementById('deptColorCustom').value); }
+function updateDeptPreview(hex) {
+  const el=document.getElementById('deptColorPreview');
+  try { el.style.background=hex+'22'; el.style.border='2px solid '+hex; } catch(e){}
+}
+function hexToRgba(hex, a) {
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function colorFromBorder(border) {
+  return { border, bg:border+'22', text: border };
+}
+function saveDept() {
+  const name=document.getElementById('deptNameInput').value.trim();
+  if(!name){ showToast('⚠ 部署名を入力してください'); return; }
+  const border=document.getElementById('deptColorCustom').value||'#888888';
+  const style={ border, bg:border+'22', text:border };
+  if(isNewDept){
+    depts.push({id:'d_'+uid(), name, ...style});
+    showToast('✓ 部署「'+name+'」を追加');
+  } else {
+    const d=depts.find(x=>x.id===editDeptId);
+    const oldName=d.name;
+    d.name=name; d.border=style.border; d.bg=style.bg; d.text=style.text;
+    // 既存スタッフの部署名も更新
+    if(oldName!==name){
+      ['1f','2f'].forEach(f=>data[f].desks.forEach(p=>{ if(p.dept===oldName)p.dept=name; }));
+    }
+    showToast('✓ 部署を更新しました');
+  }
+  persist(); render(); renderDeptList(); closeDeptForm();
+}
+function confirmDeleteDept() {
+  const d=depts.find(x=>x.id===editDeptId);
+  openConfirm(`部署「${d.name}」を削除しますか？\n（この部署のスタッフは未設定になります）`, deleteDept, '削除する');
+}
+function deleteDept() {
+  const d=depts.find(x=>x.id===editDeptId);
+  ['1f','2f'].forEach(f=>data[f].desks.forEach(p=>{ if(p.dept===d.name)p.dept=''; }));
+  depts=depts.filter(x=>x.id!==editDeptId);
+  persist(); render(); renderDeptList(); closeDeptForm();
+  showToast('🗑 部署を削除しました');
+}
+
+// ══ SHARE MODAL ══
+function openShareModal() {
+  const status=document.getElementById('syncStatus');
+  const btnArea=document.getElementById('syncBtnArea');
+  if(sharedAvailable){
+    status.textContent='✅ クラウド同期が有効です。同じブラウザ・同じアカウントでアクセスすると自動で同期されます。';
+    btnArea.innerHTML='<button class="tb-btn" style="background:#2c2825;font-size:12px;" onclick="saveToShared()">☁ 今すぐ同期</button>';
+  } else {
+    status.textContent='⚠ クラウド同期は現在利用できません。JSONファイルまたはクリップボードで共有してください。';
+    btnArea.innerHTML='';
+  }
+  document.getElementById('shareModal').classList.add('open');
+}
+async function copyToClipboard() {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify({data,depts}));
+    showToast('📋 クリップボードにコピーしました');
+  } catch(e){ showToast('⚠ コピーに失敗しました'); }
+}
+async function pasteFromClipboard() {
+  try {
+    const text=await navigator.clipboard.readText();
+    const parsed=JSON.parse(text);
+    if(parsed.data&&parsed.data['1f']&&parsed.data['2f']){ data=parsed.data; depts=parsed.depts||[...DEFAULT_DEPTS]; persist(); render(); showToast('📥 貼り付け完了'); closeModal('shareModal'); }
+    else{ showToast('⚠ 形式が違います'); }
+  } catch(e){ showToast('⚠ 貼り付けに失敗しました（クリップボードを確認）'); }
+}
+
+// ══ EXPORT/IMPORT ══
+function exportData() {
+  const blob=new Blob([JSON.stringify({data,depts},null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='座席表_'+new Date().toLocaleDateString('ja')+'.json'; a.click();
+  showToast('💾 ダウンロードしました');
+}
+function importData() {
+  const input=document.createElement('input'); input.type='file'; input.accept='.json';
+  input.onchange=e=>{
+    const file=e.target.files[0]; if(!file)return;
+    const r=new FileReader();
+    r.onload=ev=>{
+      try {
+        const d=JSON.parse(ev.target.result);
+        if(d.data&&d.data['1f']&&d.data['2f']){ data=d.data; depts=d.depts||[...DEFAULT_DEPTS]; persist(); render(); showToast('📂 読み込み完了'); }
+        else if(d['1f']&&d['2f']){ data=d; depts=[...DEFAULT_DEPTS]; persist(); render(); showToast('📂 読み込み完了（旧形式）'); }
+        else{ showToast('⚠ 形式が違います'); }
+      } catch(err){ showToast('⚠ 読み込み失敗'); }
+    };
+    r.readAsText(file,'UTF-8');
+  };
+  input.click();
+}
+
+// ══ RESET ══
+function resetAll() {
+  data=deepCopy(DEFAULT_DATA); depts=[...DEFAULT_DEPTS];
+  persist(); render(); showToast('↩ リセットしました');
+}
+
+// ══ UTILITIES ══
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function showToast(msg){
+  const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2400);
+}
+
+// ══ KEYBOARD ══
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){ ['deskModal','zoneModal','wallModal','deptModal','shareModal','confirmModal'].forEach(closeModal); }
+  if(e.key==='1'&&!e.ctrlKey&&!e.metaKey&&document.activeElement.tagName!=='INPUT') switchFloor('1f');
+  if(e.key==='2'&&!e.ctrlKey&&!e.metaKey&&document.activeElement.tagName!=='INPUT') switchFloor('2f');
+});
+
+init();
+</script>
+</body>
+</html>
